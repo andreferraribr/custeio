@@ -97,13 +97,26 @@ inflacao <- c('IPCA')
 my.ids <- c(433)
 names(my.ids) <- paste0( inflacao)
 df.bcb <- gbcbd_get_series(id = my.ids ,
-                       first.date = '2000-01-01',
+                       first.date = '2010-01-01',
                        last.date = Sys.Date(),
                        format.data = 'long',
                        use.memoise = TRUE, 
                        cache.path = tempdir(), # use tempdir for cache folder
                        do.parallel = FALSE)
 glimpse(df.bcb)
+
+
+movel <- base %>% filter( ref.date >= max(ref.date)-months(23))%>% group_by(ref.date)  %>% summarise( custeio = sum(custeio))
+
+
+movel <- left_join(movel, df.bcb)
+
+(sum(movel$custeio[13:24])/sum(movel$custeio[1:12]))-1
+
+(cumprod(prod(1+movel$value[13:24]/100)-1))
+
+
+base <- left_join(base,df.bcb)
 p <- ggplot(df.bcb, aes(x = ref.date, y = value) ) +
   geom_line() + 
   labs(title = 'Inflação', 
