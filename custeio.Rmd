@@ -46,8 +46,9 @@ colnames(custeio_historico)<-c("uo_cod", "uo", "ano","ndd_cod", "ndd", "custeio"
 custeio_historico_2018 <- read_excel("custeio historico_2018.xlsx")
 custeio_historico_2019 <- read_excel("custeio historico_2019.xlsx")
 custeio_historico_2020 <- read_excel("custeio historico_2020.xlsx")
+custeio_historico_2021 <- read_excel("custeio historico_2021.xlsx")
 
-base <- rbind(custeio_historico_2018,custeio_historico_2019,custeio_historico_2020) 
+base <- rbind(custeio_historico_2018,custeio_historico_2019,custeio_historico_2020,custeio_historico_2021) 
 
 
 

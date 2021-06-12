@@ -1,0 +1,236 @@
+ 
+---
+title: "CUSTEIO"
+output:
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    source_code: https://github.com/andreferraribr/custeio
+    social:
+    - twitter
+    - facebook
+    - menu
+runtime: shiny
+
+---
+
+
+```{r setup, include=FALSE}
+options(scipen=999)
+options(digits=2)
+# options (LC_NUMERIC="pt_BR.UTF-8")
+```
+
+```{r}
+```
+
+
+
+```{r libraries,  message=FALSE}
+library(flexdashboard)
+library(readxl)
+library(ggplot2)
+library(stringr)
+library(plotly)
+library(DT)
+library(shiny)
+library(shinyWidgets)
+library(lubridate)
+library(tidyverse)
+library(janitor)
+library(scales)
+library(GetBCBData)
+```
+
+
+
+```{r negar %in%}
+# https://www.r-bloggers.com/the-notin-operator/
+'%!in%' <- Negate('%in%')
+```
+
+
+```{r}
+# criar funções para apresentar a unidade de medida e converter automaticamente para milhares, milhões, bilhões e trilhões
+escala <- function(x){case_when(
+  abs(x) < 1000 ~ "",
+  abs(x) >= 1000  & abs(x) < 1000000 ~ "K",
+  abs(x) >= 1000000  & abs(x) < 1000000000 ~ "Mi",
+  abs(x) >= 1000000000  & abs(x) < 1000000000000 ~ "Bi",
+  abs(x) >= 1000000000000  & abs(x) < 1000000000000000 ~ "trilhão",
+  TRUE ~ "maior que trilhão"
+)}
+ escala <- Vectorize(escala)
+divisor <- function(x){case_when(
+  abs(x) < 1000 ~ x,
+  abs(x) >= 1000  & abs(x) < 1000000 ~ round(x/1000,digits = 1),
+  abs(x) >= 1000000  & abs(x) < 1000000000 ~ round(x/1000000, digits = 1),
+  abs(x) >= 1000000000  & abs(x) < 1000000000000 ~ round (x/1000000000, digits = 1),
+  abs(x) >= 1000000000000  & abs(x) < 1000000000000000 ~ round (x/1000000000000, digits = 1),
+  TRUE ~ x
+)}
+ divisor <- Vectorize(divisor)
+```
+
+
+
+```{r}
+nomenclatura <- read_excel("nomenclatura.xlsx")
+```
+
+```{r}
+custeio_historico <- read_excel("custeio_historico.xlsx")
+
+colnames(custeio_historico)<-c("uo_cod", "uo", "ano","ndd_cod", "ndd", "custeio")
+```
+
+
+```{r}
+
+
+custeio_historico_2018 <- read_excel("custeio historico_2018.xlsx")
+custeio_historico_2019 <- read_excel("custeio historico_2019.xlsx")
+custeio_historico_2020 <- read_excel("custeio historico_2020.xlsx")
+custeio_historico_2021 <- read_excel("custeio historico_2021.xlsx")
+
+base <- rbind(custeio_historico_2018,custeio_historico_2019,custeio_historico_2020,custeio_historico_2021) 
+
+
+
+
+colnames(base)<-c("uo_cod", "uo", "mes","ndd_id", "ndd", "custeio")
+
+# base <- base %>% filter(mes != "201813")
+
+base <- base %>% filter(!endsWith(mes,"13"))
+colnames(base)<-c("uo_cod", "uo", "mes","ndd_id", "ndd", "custeio")
+
+base<- full_join (base,nomenclatura %>% select(-ndd) ,  by = c("ndd_id" = "ndd_id"))
+
+base <-  base %>%    mutate( ref.date = parse_date_time( base$mes, "ym"))%>% drop_na()
+
+
+
+```
+
+```{r}
+inflacao <- c('IPCA')
+my.ids <- c(433)
+names(my.ids) <- paste0( inflacao)
+df.bcb <- gbcbd_get_series(id = my.ids ,
+                       first.date = '2010-01-01',
+                       last.date = Sys.Date(),
+                       format.data = 'long',
+                       use.memoise = TRUE, 
+                       cache.path = tempdir(), # use tempdir for cache folder
+                       do.parallel = FALSE)
+
+
+
+movel <- base %>% filter( ref.date >= max(ref.date)-months(23))%>% group_by(ref.date)  %>% summarise( custeio = sum(custeio))
+
+
+movel <- left_join(movel, df.bcb)
+
+# (sum(movel$custeio[13:24])/sum(movel$custeio[1:12]))-1
+# 
+# (cumprod(prod(1+movel$value[13:24]/100)-1))
+
+
+# base <- left_join(base,df.bcb)
+```
+
+
+Filtro {.sidebar}
+=====================================
+```{r eval=FALSE, include=FALSE}
+pickerInput("ufs","Selecione a UF", unique(custo_total$uf), selected =unique(custo_total$uf) , options = list(`actions-box` = TRUE),multiple = T)
+```
+
+
+## Metodolodia
+
+* Fonte SIAFI  
+
+* Competência 2020   
+
+* [Unidades Descentralizadas (UDs)](https://www.gov.br/economia/pt-br/acesso-a-informacao/institucional/quem-e-quem/secretaria-executiva/secretaria-de-gestao-corporativa/unidades-descentralizadas)  
+  
+* [Custeio Administrativo](https://www.gov.br/economia/pt-br/centrais-de-conteudo/publicacoes/boletins/boletim-de-custeio-administrativo/arquivos/2019/notametodologicacusteioadministrativo_2018_2019.pdf)  
+  
+##### Excluídos da análise:
++ Ex-territórios (AP, AC, RO e RR)  
++ Tocantis (gerido por Goiás)  
++ DF (devido às peculiaridades)    
+
+Unidades Descentralizadas (UDs)
+=============================================
+
+
+Row 
+-----------------------------------------------------------------------
+
+### Custeio nos ultimos 12 meses 
+
+
+
+```{r value custo pessoal UDs}
+
+
+
+
+
+renderValueBox({
+  
+  valor <- sum(movel$custeio[13:24])
+ valueBox( # utilizar funções divisor() e escala () para converter automaticamente valores para milhar, milhão, bilhão...  
+    paste0("R$ ", divisor(valor)," ",  escala(valor)),
+  color = "red",
+  caption = max(base$ref.date))
+  })
+
+```
+
+### Varianca em R$ nominais
+
+```{r value custo pessoalHKHI UDs}
+renderValueBox({
+  
+  valor <- sum(movel$custeio[13:24])-sum(movel$custeio[1:12])
+  
+ valueBox( paste0("R$ ", divisor(valor)," ",  escala(valor)),
+  color = "red")
+  })
+
+```
+
+
+
+### Variacao %
+
+
+
+
+```{r value custo pessoalKHK UDs}
+renderValueBox({
+ valueBox(  round(((sum(movel$custeio[13:24])/sum(movel$custeio[1:12]))-1)*100,2),
+  color = "red",
+  
+  caption = "variacao")
+  })
+
+```
+
+
+### IPCA
+
+```{r value custo pessoalNNN UDs}
+renderValueBox({
+ valueBox( round((cumprod(prod(1+movel$value[13:24]/100)-1))*100,2),
+  color = "red")
+  })
+
+```
+
+
+Row 
+-----------------------------------------------------------------------
