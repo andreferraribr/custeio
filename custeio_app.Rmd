@@ -124,10 +124,13 @@ df.bcb <- gbcbd_get_series(id = my.ids ,
                        cache.path = tempdir(), # use tempdir for cache folder
                        do.parallel = FALSE)
 
-
+base_react <- reactive(base %>% filter(uo %in% input$uo, tipo_custeio %in% input$tipo_custeio))
 
 movel <- base %>% filter( ref.date >= max(ref.date)-months(23))%>% group_by(ref.date)  %>% summarise( custeio = sum(custeio))
 
+# (base %>% filter( ref.date > max(base$ref.date)-months(12) ) %>% group_by(ref.date) %>% summarise(custeio= sum(custeio)))
+
+# (base %>% filter( ref.date > max(base$ref.date)-months(24) & ref.date < max(base$ref.date)-months(11) ) %>% group_by(ref.date) %>% summarise(custeio= sum(custeio)))
 
 movel <- left_join(movel, df.bcb)
 
@@ -140,10 +143,17 @@ movel <- left_join(movel, df.bcb)
 ```
 
 
-Filtro {.sidebar}
+Filtro {.sidebar data-width=400}
 =====================================
-```{r eval=FALSE, include=FALSE}
-pickerInput("ufs","Selecione a UF", unique(custo_total$uf), selected =unique(custo_total$uf) , options = list(`actions-box` = TRUE),multiple = T)
+```{r}
+pickerInput("uo","Selecione o órgão", unique(base$uo), selected =unique(base$uo) ,
+            options = list(`actions-box` = TRUE),
+            width = 400,
+            multiple = T)
+
+
+pickerInput("tipo_custeio","Selecione o tipo de custeio", unique(base$tipo_custeio), selected =unique(base$tipo_custeio) , options = list(`actions-box` = TRUE),width = 400,multiple = T)
+
 ```
 
 
@@ -181,7 +191,16 @@ Row
 
 renderValueBox({
   
-  valor <- sum(movel$custeio[13:24])
+  
+  # (base %>% filter( ref.date > max(base$ref.date)-months(12) ) %>% group_by(ref.date) %>% summarise(custeio= sum(custeio)))
+
+# (base %>% filter( ref.date > max(base$ref.date)-months(24) & ref.date < max(base$ref.date)-months(11) ) %>% group_by(ref.date) %>% summarise(custeio= sum(custeio)))
+  
+ df <- base_react() %>% filter( ref.date > max(base_react()$ref.date)-months(12) ) %>% group_by(ref.date) %>% summarise(custeio= sum(custeio))
+ 
+ valor <- sum(base_react() %>% filter( ref.date > max(base_react()$ref.date)-months(12) )  %>% summarise(custeio= sum(custeio)))
+  
+  # valor <- sum(movel$custeio[13:24])
  valueBox( # utilizar funções divisor() e escala () para converter automaticamente valores para milhar, milhão, bilhão...  
     paste0("R$ ", divisor(valor)," ",  escala(valor)),
   color = "red",
@@ -195,7 +214,9 @@ renderValueBox({
 ```{r value custo pessoalHKHI UDs}
 renderValueBox({
   
-  valor <- sum(movel$custeio[13:24])-sum(movel$custeio[1:12])
+  df <- (base_react() %>% filter( ref.date > max(base_react()$ref.date)-months(24) & ref.date < max(base_react()$ref.date)-months(11) ) %>% group_by(ref.date) %>% summarise(custeio= sum(custeio)))
+  
+  valor <-sum(base_react() %>% filter( ref.date > max(base_react()$ref.date)-months(12) )  %>% summarise(custeio= sum(custeio)))- sum(base_react() %>% filter( ref.date > max(base_react()$ref.date)-months(24) & ref.date < max(base_react()$ref.date)-months(11) )  %>% summarise(custeio= sum(custeio)))
   
  valueBox( paste0("R$ ", divisor(valor)," ",  escala(valor)),
   color = "red")
@@ -212,7 +233,7 @@ renderValueBox({
 
 ```{r value custo pessoalKHK UDs}
 renderValueBox({
- valueBox(  round(((sum(movel$custeio[13:24])/sum(movel$custeio[1:12]))-1)*100,2),
+ valueBox(  round((sum(base_react() %>% filter( ref.date > max(base_react()$ref.date)-months(12) )  %>% summarise(custeio= sum(custeio)))/ sum(base_react() %>% filter( ref.date > max(base_react()$ref.date)-months(24) & ref.date < max(base_react()$ref.date)-months(11) )  %>% summarise(custeio= sum(custeio)))-1)*100,2),
   color = "red",
   
   caption = "variacao")
@@ -231,6 +252,75 @@ renderValueBox({
 
 ```
 
-
 Row 
 -----------------------------------------------------------------------
+
+
+### Ranking custo total em R$ milhões
+
+
+
+
+```{r plot custo total UDs}
+renderPlotly(
+  
+    
+ggplot(base_react() %>% group_by(uo) %>% summarise(custeio = sum(custeio))   , aes(x = reorder (uo,-(custeio)), y = round((custeio)/1000000,1)))+ coord_flip() + 
+    geom_col(fill = if_else(base_react()$uo %in% input$uo, "red", "gray"))+ theme_classic()+
+    
+   theme(
+     # axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.title.y = element_blank()))
+```
+
+### Ranking custeio administrativo em R$ milhões
+
+
+```{r plot custeio UDs, eval=FALSE, include=FALSE}
+renderPlotly( ggplot(custo_uds   , aes(x = reorder (uf,-custeio), y = round(custeio/1000000,1)))+ coord_flip() + 
+    geom_col(fill = if_else(custo_total$uf %in% input$ufs, "red", "gray"))+ theme_classic()+
+      ylim(0, max(custo_uds$custeio+custo_uds$custo_pessoal)/1000000)+
+      
+      theme(
+        # axis.text.x = element_blank(),
+            axis.title.x = element_blank(),
+          axis.title.y = element_blank()))
+```
+
+### Ranking custo com pessoal em R$ milhões
+
+
+
+```{r plot custo pessoal uds, eval=FALSE, include=FALSE}
+renderPlotly( ggplot(custo_uds   , aes(x = reorder (uf,-custo_pessoal), y = round(custo_pessoal/1000000,1)))+ coord_flip() + 
+    geom_col(fill = if_else(custo_total$uf %in% input$ufs, "red", "gray"))+ theme_classic()+
+      ylim(0, max(custo_uds$custeio+custo_uds$custo_pessoal)/1000000)+
+         
+    theme(
+          # axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.title.y = element_blank()))
+```
+
+
+
+### Ranking comissão
+
+
+```{r plot comissao, eval=FALSE, include=FALSE}
+renderPlotly({
+   ggplot(custo_total   , aes(x = reorder (uf,-percentual), y = percentual, label =paste0(round(percentual*100,digits = 1), "%")))+ coord_flip() + 
+   geom_col(fill = if_else(custo_total$uf %in% input$ufs, "red", "gray"))+ theme_classic()+ 
+                                     
+    # Change y-axis to percent
+  scale_y_continuous(labels = scales::percent)  +
+    theme(
+        # axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.title.y = element_blank())
+   }) 
+```
+
+
+
