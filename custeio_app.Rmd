@@ -77,22 +77,16 @@ divisor <- function(x){case_when(
 nomenclatura <- read_excel("nomenclatura.xlsx")
 ```
 
-```{r}
-custeio_historico <- read_excel("custeio_historico.xlsx")
-
-colnames(custeio_historico)<-c("uo_cod", "uo", "ano","ndd_cod", "ndd", "custeio")
-```
-
 
 ```{r}
 
 
-custeio_historico_2018 <- read_excel("custeio historico_2018.xlsx")
+# custeio_historico_2018 <- read_excel("custeio historico_2018.xlsx")
 custeio_historico_2019 <- read_excel("custeio historico_2019.xlsx")
 custeio_historico_2020 <- read_excel("custeio historico_2020.xlsx")
 custeio_historico_2021 <- read_excel("custeio historico_2021.xlsx")
 
-base <- rbind(custeio_historico_2018,custeio_historico_2019,custeio_historico_2020,custeio_historico_2021) 
+base <- rbind(custeio_historico_2019,custeio_historico_2020,custeio_historico_2021) 
 
 
 
@@ -106,7 +100,17 @@ colnames(base)<-c("uo_cod", "uo", "mes","ndd_id", "ndd", "custeio")
 
 base<- full_join (base,nomenclatura %>% select(-ndd) ,  by = c("ndd_id" = "ndd_id"))
 
-base <-  base %>%    mutate( ref.date = parse_date_time( base$mes, "ym"))%>% drop_na()
+base <-  base %>%    mutate( ref.date = parse_date_time( base$mes, "ym"))%>% drop_na() 
+
+
+base <- base %>%  filter( ref.date >= max(ref.date)-months(23))%>% group_by(uo_cod, uo, tipo_custeio, ref.date)  %>% summarise( custeio = sum(custeio))
+
+
+
+base <- base %>% mutate(periodo = if_else(ref.date < max(base$ref.date)-months(11), "atual", "anterior") )
+
+ teste <- base  %>% group_by(uo, uo_cod, tipo_custeio, periodo) %>% summarise(custeio= sum(custeio)) %>%  pivot_wider(names_from = "periodo", values_from= "custeio")%>% 
+  mutate_all(coalesce, 0)
 
 
 
@@ -124,15 +128,22 @@ df.bcb <- gbcbd_get_series(id = my.ids ,
                        cache.path = tempdir(), # use tempdir for cache folder
                        do.parallel = FALSE)
 
-base_react <- reactive(base %>% filter(uo %in% input$uo, tipo_custeio %in% input$tipo_custeio))
 
-movel <- base %>% filter( ref.date >= max(ref.date)-months(23))%>% group_by(ref.date)  %>% summarise( custeio = sum(custeio))
 
-# (base %>% filter( ref.date > max(base$ref.date)-months(12) ) %>% group_by(ref.date) %>% summarise(custeio= sum(custeio)))
 
-# (base %>% filter( ref.date > max(base$ref.date)-months(24) & ref.date < max(base$ref.date)-months(11) ) %>% group_by(ref.date) %>% summarise(custeio= sum(custeio)))
+  df.bcb <-  df.bcb %>%  filter( ref.date >= max(base$ref.date)-months(11)) %>%group_by(ref.date) %>% summarise( value = max(value))
 
-movel <- left_join(movel, df.bcb)
+
+base_react <- reactive(base %>% filter(uo %in% input$uo, tipo_custeio %in% input$tipo_custeio)%>% group_by(uo, uo_cod, tipo_custeio, periodo) %>% summarise(custeio= sum(custeio)) %>%  pivot_wider(names_from = "periodo", values_from= "custeio")%>% 
+  mutate_all(coalesce, 0))
+
+# movel <- base %>% filter( ref.date >= max(ref.date)-months(23))%>% group_by(ref.date)  %>% summarise( custeio = sum(custeio))
+# 
+# # (base %>% filter( ref.date > max(base$ref.date)-months(12) ) %>% group_by(ref.date) %>% summarise(custeio= sum(custeio)))
+# 
+# # (base %>% filter( ref.date > max(base$ref.date)-months(24) & ref.date < max(base$ref.date)-months(11) ) %>% group_by(ref.date) %>% summarise(custeio= sum(custeio)))
+# 
+# movel <- left_join(movel, df.bcb)
 
 # (sum(movel$custeio[13:24])/sum(movel$custeio[1:12]))-1
 # 
@@ -172,7 +183,7 @@ pickerInput("tipo_custeio","Selecione o tipo de custeio", unique(base$tipo_custe
 + Tocantis (gerido por Goiás)  
 + DF (devido às peculiaridades)    
 
-Unidades Descentralizadas (UDs)
+Visão Geral
 =============================================
 
 
@@ -196,9 +207,9 @@ renderValueBox({
 
 # (base %>% filter( ref.date > max(base$ref.date)-months(24) & ref.date < max(base$ref.date)-months(11) ) %>% group_by(ref.date) %>% summarise(custeio= sum(custeio)))
   
- df <- base_react() %>% filter( ref.date > max(base_react()$ref.date)-months(12) ) %>% group_by(ref.date) %>% summarise(custeio= sum(custeio))
  
- valor <- sum(base_react() %>% filter( ref.date > max(base_react()$ref.date)-months(12) )  %>% summarise(custeio= sum(custeio)))
+ 
+ valor <- sum(base_react()$atual )
   
   # valor <- sum(movel$custeio[13:24])
  valueBox( # utilizar funções divisor() e escala () para converter automaticamente valores para milhar, milhão, bilhão...  
@@ -214,10 +225,8 @@ renderValueBox({
 ```{r value custo pessoalHKHI UDs}
 renderValueBox({
   
-  df <- (base_react() %>% filter( ref.date > max(base_react()$ref.date)-months(24) & ref.date < max(base_react()$ref.date)-months(11) ) %>% group_by(ref.date) %>% summarise(custeio= sum(custeio)))
-  
-  valor <-sum(base_react() %>% filter( ref.date > max(base_react()$ref.date)-months(12) )  %>% summarise(custeio= sum(custeio)))- sum(base_react() %>% filter( ref.date > max(base_react()$ref.date)-months(24) & ref.date < max(base_react()$ref.date)-months(11) )  %>% summarise(custeio= sum(custeio)))
-  
+
+  valor <- sum(base_react()$atual )-sum(base_react()$anterior )
  valueBox( paste0("R$ ", divisor(valor)," ",  escala(valor)),
   color = "red")
   })
@@ -233,11 +242,13 @@ renderValueBox({
 
 ```{r value custo pessoalKHK UDs}
 renderValueBox({
- valueBox(  round((sum(base_react() %>% filter( ref.date > max(base_react()$ref.date)-months(12) )  %>% summarise(custeio= sum(custeio)))/ sum(base_react() %>% filter( ref.date > max(base_react()$ref.date)-months(24) & ref.date < max(base_react()$ref.date)-months(11) )  %>% summarise(custeio= sum(custeio)))-1)*100,2),
+ valueBox( 1- sum(base_react()$atual )/sum(base_react()$anterior ),
   color = "red",
   
   caption = "variacao")
   })
+
+
 
 ```
 
@@ -246,7 +257,7 @@ renderValueBox({
 
 ```{r value custo pessoalNNN UDs}
 renderValueBox({
- valueBox( round((cumprod(prod(1+movel$value[13:24]/100)-1))*100,2),
+ valueBox( round(((prod(1+df.bcb$value/100)-1))*100,2),
   color = "red")
   })
 
@@ -265,8 +276,8 @@ Row
 renderPlotly(
   
     
-ggplot(base_react() %>% group_by(uo) %>% summarise(custeio = sum(custeio))   , aes(x = reorder (uo,-(custeio)), y = round((custeio)/1000000,1)))+ coord_flip() + 
-    geom_col(fill = if_else(base_react()$uo %in% input$uo, "red", "gray"))+ theme_classic()+
+ggplot(base_react()    , aes(x = reorder (uo_cod,+(atual-anterior)), y = round((atual-anterior)/1000000,1)))+ coord_flip() + 
+     theme_classic()+
     
    theme(
      # axis.text.x = element_blank(),
@@ -278,13 +289,16 @@ ggplot(base_react() %>% group_by(uo) %>% summarise(custeio = sum(custeio))   , a
 
 
 ```{r plot custeio UDs, eval=FALSE, include=FALSE}
-renderPlotly( ggplot(custo_uds   , aes(x = reorder (uf,-custeio), y = round(custeio/1000000,1)))+ coord_flip() + 
-    geom_col(fill = if_else(custo_total$uf %in% input$ufs, "red", "gray"))+ theme_classic()+
-      ylim(0, max(custo_uds$custeio+custo_uds$custo_pessoal)/1000000)+
-      
-      theme(
-        # axis.text.x = element_blank(),
-            axis.title.x = element_blank(),
+renderPlotly(
+
+   
+    
+ggplot(base_react() %>% group_by(uo_cod) %>% summarise(variacao = sum(custeio))   , aes(x = reorder (uo_cod,+(custeio)), y = round((custeio)/1000000,1)))+ coord_flip() + 
+    geom_col(fill = if_else(unique(base_react()$uo) %in% c( input$uo), "red", "gray"))+ theme_classic()+
+    
+   theme(
+     # axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
           axis.title.y = element_blank()))
 ```
 
