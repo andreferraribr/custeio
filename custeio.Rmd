@@ -115,8 +115,9 @@ movel <- left_join(movel, df.bcb)
 (sum(movel$custeio[13:24])/sum(movel$custeio[1:12]))-1
 
 (cumprod(prod(1+movel$value[13:24]/100)-1))
+# (base %>% filter( ref.date > max(base$ref.date)-months(12) ) %>% group_by(ref.date) %>% summarise(custeio= sum(custeio)))
 
-
+# (base %>% filter( ref.date > max(base$ref.date)-months(24) & ref.date < max(base$ref.date)-months(11) ) %>% group_by(ref.date) %>% summarise(custeio= sum(custeio)))
 base <- left_join(base,df.bcb)
 p <- ggplot(df.bcb, aes(x = ref.date, y = value) ) +
   geom_line() + 
@@ -139,6 +140,8 @@ base <- base %>% filter(!endsWith(mes,"13"))
 colnames(base)<-c("uo_cod", "uo", "mes","ndd_cod", "ndd", "custeio")
 
 
+
+base_react <- reactive(base %>% filter(uo %in% input$uo, tipo_custeio %in% input$tipo_custeio))
 ```
 
 

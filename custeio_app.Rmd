@@ -73,12 +73,12 @@ divisor <- function(x){case_when(
 
 
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 nomenclatura <- read_excel("nomenclatura.xlsx")
 ```
 
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 
 
 # custeio_historico_2018 <- read_excel("custeio historico_2018.xlsx")
@@ -116,7 +116,7 @@ base <- base %>% mutate(periodo = if_else(ref.date < max(base$ref.date)-months(1
 
 ```
 
-```{r}
+```{r eval=FALSE, include=FALSE}
 inflacao <- c('IPCA')
 my.ids <- c(433)
 names(my.ids) <- paste0( inflacao)
@@ -134,8 +134,7 @@ df.bcb <- gbcbd_get_series(id = my.ids ,
   df.bcb <-  df.bcb %>%  filter( ref.date >= max(base$ref.date)-months(11)) %>%group_by(ref.date) %>% summarise( value = max(value))
 
 
-base_react <- reactive(base %>% filter(uo %in% input$uo, tipo_custeio %in% input$tipo_custeio)%>% group_by(uo, uo_cod, tipo_custeio, periodo) %>% summarise(custeio= sum(custeio)) %>%  pivot_wider(names_from = "periodo", values_from= "custeio")%>% 
-  mutate_all(coalesce, 0))
+
 
 # movel <- base %>% filter( ref.date >= max(ref.date)-months(23))%>% group_by(ref.date)  %>% summarise( custeio = sum(custeio))
 # 
@@ -157,14 +156,26 @@ base_react <- reactive(base %>% filter(uo %in% input$uo, tipo_custeio %in% input
 Filtro {.sidebar data-width=400}
 =====================================
 ```{r}
-pickerInput("uo","Selecione o órgão", unique(base$uo), selected =unique(base$uo) ,
+
+base_app <- read_csv("base_app.csv")
+
+df.bcb <- read_csv("bcb.csv")
+
+pickerInput("uo","Selecione o órgão", unique(base_app$uo), selected =unique(base_app$uo) ,
             options = list(`actions-box` = TRUE),
             width = 400,
             multiple = T)
 
 
-pickerInput("tipo_custeio","Selecione o tipo de custeio", unique(base$tipo_custeio), selected =unique(base$tipo_custeio) , options = list(`actions-box` = TRUE),width = 400,multiple = T)
+pickerInput("tipo_custeio","Selecione o tipo de custeio", unique(base_app$tipo_custeio), selected =unique(base_app$tipo_custeio) , options = list(`actions-box` = TRUE),width = 400,multiple = T)
 
+
+base_react <- reactive(base_app %>% filter(uo %in% input$uo, tipo_custeio %in% input$tipo_custeio))
+
+
+base_percentual <- reactive(base_react() %>% group_by(uo, uo_cod) %>% summarise(atual = sum(atual), anterior= sum(anterior)) %>% mutate(percentual = (atual/anterior-1)*100) %>% mutate(nominal = atual-anterior))
+
+base_custeio <- reactive(base_react() %>% group_by( tipo_custeio) %>% summarise(atual = sum(atual), anterior= sum(anterior)) %>% mutate(percentual = (atual/anterior-1)*100) %>% mutate(nominal = atual-anterior))
 ```
 
 
@@ -215,7 +226,7 @@ renderValueBox({
  valueBox( # utilizar funções divisor() e escala () para converter automaticamente valores para milhar, milhão, bilhão...  
     paste0("R$ ", divisor(valor)," ",  escala(valor)),
   color = "red",
-  caption = max(base$ref.date))
+  caption = max(df.bcb$ref.date))
   })
 
 ```
@@ -242,7 +253,7 @@ renderValueBox({
 
 ```{r value custo pessoalKHK UDs}
 renderValueBox({
- valueBox( 1- sum(base_react()$atual )/sum(base_react()$anterior ),
+ valueBox( round((sum(base_react()$atual )/sum(base_react()$anterior)-1)*100,2),
   color = "red",
   
   caption = "variacao")
@@ -276,8 +287,9 @@ Row
 renderPlotly(
   
     
-ggplot(base_react()    , aes(x = reorder (uo_cod,+(atual-anterior)), y = round((atual-anterior)/1000000,1)))+ coord_flip() + 
-     theme_classic()+
+ggplot(base_percentual()   , aes(x = reorder (uo_cod,(-nominal)), y = round((nominal)/1000000,1)))+ coord_flip() + 
+    geom_col(fill = if_else( base_percentual()$nominal >0,"red", "blue"))+
+  theme_classic()+
     
    theme(
      # axis.text.x = element_blank(),
@@ -288,13 +300,13 @@ ggplot(base_react()    , aes(x = reorder (uo_cod,+(atual-anterior)), y = round((
 ### Ranking custeio administrativo em R$ milhões
 
 
-```{r plot custeio UDs, eval=FALSE, include=FALSE}
+```{r plot custeio UDs}
 renderPlotly(
-
-   
+  
     
-ggplot(base_react() %>% group_by(uo_cod) %>% summarise(variacao = sum(custeio))   , aes(x = reorder (uo_cod,+(custeio)), y = round((custeio)/1000000,1)))+ coord_flip() + 
-    geom_col(fill = if_else(unique(base_react()$uo) %in% c( input$uo), "red", "gray"))+ theme_classic()+
+ggplot(base_percentual()    , aes(x = reorder (uo_cod,(-percentual)), y = percentual))+ coord_flip() + 
+    geom_col(fill = if_else( base_percentual()$percentual >0,"red", "blue"))+
+  theme_classic()+
     
    theme(
      # axis.text.x = element_blank(),
@@ -306,13 +318,16 @@ ggplot(base_react() %>% group_by(uo_cod) %>% summarise(variacao = sum(custeio)) 
 
 
 
-```{r plot custo pessoal uds, eval=FALSE, include=FALSE}
-renderPlotly( ggplot(custo_uds   , aes(x = reorder (uf,-custo_pessoal), y = round(custo_pessoal/1000000,1)))+ coord_flip() + 
-    geom_col(fill = if_else(custo_total$uf %in% input$ufs, "red", "gray"))+ theme_classic()+
-      ylim(0, max(custo_uds$custeio+custo_uds$custo_pessoal)/1000000)+
-         
-    theme(
-          # axis.text.x = element_blank(),
+```{r plot custo pessoal uds, echo=FALSE}
+renderPlotly(
+  
+    
+ggplot(base_custeio()   , aes(x = reorder (tipo_custeio,(-nominal)), y = round((nominal)/1000000,1)))+ coord_flip() + 
+    geom_col(fill = if_else( base_custeio()$nominal >0,"red", "blue"))+
+  theme_classic()+
+    
+   theme(
+     # axis.text.x = element_blank(),
           axis.title.x = element_blank(),
           axis.title.y = element_blank()))
 ```
@@ -322,18 +337,18 @@ renderPlotly( ggplot(custo_uds   , aes(x = reorder (uf,-custo_pessoal), y = roun
 ### Ranking comissão
 
 
-```{r plot comissao, eval=FALSE, include=FALSE}
-renderPlotly({
-   ggplot(custo_total   , aes(x = reorder (uf,-percentual), y = percentual, label =paste0(round(percentual*100,digits = 1), "%")))+ coord_flip() + 
-   geom_col(fill = if_else(custo_total$uf %in% input$ufs, "red", "gray"))+ theme_classic()+ 
-                                     
-    # Change y-axis to percent
-  scale_y_continuous(labels = scales::percent)  +
-    theme(
-        # axis.text.x = element_blank(),
+```{r plot comissao}
+renderPlotly(
+  
+    
+ggplot(base_custeio()    , aes(x = reorder (tipo_custeio,(-percentual)), y = percentual))+ coord_flip() + 
+    geom_col(fill = if_else( base_custeio()$percentual >0,"red", "blue"))+
+  theme_classic()+
+    
+   theme(
+     # axis.text.x = element_blank(),
           axis.title.x = element_blank(),
-          axis.title.y = element_blank())
-   }) 
+          axis.title.y = element_blank()))
 ```
 
 
