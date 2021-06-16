@@ -1,0 +1,125 @@
+ 
+---
+title: "custeio_data"
+output: "html"
+
+---
+
+
+
+
+```{r setup, include=FALSE}
+options(scipen=999)
+options(digits=2)
+# options (LC_NUMERIC="pt_BR.UTF-8")
+```
+
+
+```{r libraries,  message=FALSE}
+
+library(readxl)
+library(ggplot2)
+library(stringr)
+library(plotly)
+library(DT)
+
+
+library(lubridate)
+library(tidyverse)
+library(janitor)
+library(scales)
+library(GetBCBData)
+```
+
+
+
+```{r negar %in%}
+# https://www.r-bloggers.com/the-notin-operator/
+'%!in%' <- Negate('%in%')
+```
+
+
+
+
+```{r}
+nomenclatura <- read_excel("nomenclatura.xlsx")
+```
+
+
+```{r}
+
+
+# custeio_historico_2018 <- read_excel("custeio historico_2018.xlsx")
+custeio_historico_2019 <- read_excel("custeio historico_2019.xlsx")
+custeio_historico_2020 <- read_excel("custeio historico_2020.xlsx")
+custeio_historico_2021 <- read_excel("custeio historico_2021.xlsx")
+
+base <- rbind(custeio_historico_2019,custeio_historico_2020,custeio_historico_2021) 
+
+
+
+
+colnames(base)<-c("uo_cod", "uo", "mes","ndd_id", "ndd", "custeio")
+
+# base <- base %>% filter(mes != "201813")
+
+base <- base %>% filter(!endsWith(mes,"13"), uo_cod %!in% c(49000,58000,57000))
+colnames(base)<-c("uo_cod", "uo", "mes","ndd_id", "ndd", "custeio")
+
+base<- full_join (base,nomenclatura %>% select(-ndd) ,  by = c("ndd_id" = "ndd_id"))
+
+base <-  base %>%    mutate( ref.date = parse_date_time( base$mes, "ym"))%>% drop_na() 
+
+
+base <- base %>%  filter( ref.date >= max(ref.date)-months(23))%>% group_by(uo_cod, uo, tipo_custeio, ref.date)  %>% summarise( custeio = sum(custeio))
+
+
+
+base <- base %>% mutate(periodo = if_else(ref.date < max(base$ref.date)-months(11), "atual", "anterior") )
+
+ base_app<- base  %>% group_by(uo, uo_cod, tipo_custeio, periodo) %>% summarise(custeio= sum(custeio)) %>%  pivot_wider(names_from = "periodo", values_from= "custeio")%>% 
+  mutate_all(coalesce, 0) 
+ 
+ base_app <-base_app %>% mutate(nominal = atual-anterior)
+
+base_app <- base_app %>%  mutate (percentual = round(100*((atual/anterior)-1),2))
+
+
+
+```
+
+```{r}
+inflacao <- c('IPCA')
+my.ids <- c(433)
+names(my.ids) <- paste0( inflacao)
+df.bcb <- gbcbd_get_series(id = my.ids ,
+                       first.date = ymd(max(base$ref.date)-months(11)),
+                       last.date = Sys.Date(),
+                       format.data = 'long',
+                       use.memoise = TRUE, 
+                       cache.path = tempdir(), # use tempdir for cache folder
+                       do.parallel = FALSE)
+
+
+
+
+  
+
+```
+```{r}
+ggplot(base_app %>% group_by(uo_cod) %>% summarise(percentual = round(100*((atual/anterior)-1),2))   , aes(x = reorder (uo_cod,+(percentual)), y = percentual)+ coord_flip() + 
+    geom_col(fill = "red")+
+  theme_classic()+
+    
+   theme(
+     # axis.text.x = element_blank(),
+          axis.title.x = element_blank(),
+          axis.title.y = element_blank()))
+```
+
+
+
+```{r}
+write_excel_csv(base_app,"base_app.csv")
+write_excel_csv(df.bcb, "bcb.csv")
+```

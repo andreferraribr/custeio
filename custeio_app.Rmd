@@ -159,23 +159,25 @@ Filtro {.sidebar data-width=400}
 
 base_app <- read_csv("base_app.csv")
 
+
+
 df.bcb <- read_csv("bcb.csv")
 
-pickerInput("uo","Selecione o órgão", unique(base_app$uo), selected =unique(base_app$uo) ,
+pickerInput("sigla","Selecione o órgão", unique(base_app$sigla), selected =unique(base_app$sigla) ,
             options = list(`actions-box` = TRUE),
             width = 400,
             multiple = T)
 
 
-pickerInput("tipo_custeio","Selecione o tipo de custeio", unique(base_app$tipo_custeio), selected =unique(base_app$tipo_custeio) , options = list(`actions-box` = TRUE),width = 400,multiple = T)
+pickerInput("tipo_desc","Selecione o tipo de custeio", unique(base_app$tipo_desc), selected =unique(base_app$tipo_desc) , options = list(`actions-box` = TRUE),width = 400,multiple = T)
 
 
-base_react <- reactive(base_app %>% filter(uo %in% input$uo, tipo_custeio %in% input$tipo_custeio))
+base_react <- reactive(base_app %>% filter(sigla %in% input$sigla, tipo_desc %in% input$tipo_desc))
 
 
-base_percentual <- reactive(base_react() %>% group_by(uo, uo_cod) %>% summarise(atual = sum(atual), anterior= sum(anterior)) %>% mutate(percentual = (atual/anterior-1)*100) %>% mutate(nominal = atual-anterior))
+base_percentual <- reactive(base_react() %>% group_by(sigla, uo, uo_cod) %>% summarise(atual = sum(atual), anterior= sum(anterior)) %>% mutate(percentual = (atual/anterior-1)*100) %>% mutate(nominal = atual-anterior))
 
-base_custeio <- reactive(base_react() %>% group_by( tipo_custeio) %>% summarise(atual = sum(atual), anterior= sum(anterior)) %>% mutate(percentual = (atual/anterior-1)*100) %>% mutate(nominal = atual-anterior))
+base_custeio <- reactive(base_react() %>% group_by( tipo_desc) %>% summarise(atual = sum(atual), anterior= sum(anterior)) %>% mutate(percentual = (atual/anterior-1)*100) %>% mutate(nominal = atual-anterior))
 ```
 
 
@@ -183,16 +185,16 @@ base_custeio <- reactive(base_react() %>% group_by( tipo_custeio) %>% summarise(
 
 * Fonte SIAFI  
 
-* Competência 2020   
+* Visão por UO do órgão máximo
 
-* [Unidades Descentralizadas (UDs)](https://www.gov.br/economia/pt-br/acesso-a-informacao/institucional/quem-e-quem/secretaria-executiva/secretaria-de-gestao-corporativa/unidades-descentralizadas)  
+* Saldo dos pagamentos totais (LOA + RP) 
+ 
+
+ 
   
 * [Custeio Administrativo](https://www.gov.br/economia/pt-br/centrais-de-conteudo/publicacoes/boletins/boletim-de-custeio-administrativo/arquivos/2019/notametodologicacusteioadministrativo_2018_2019.pdf)  
   
-##### Excluídos da análise:
-+ Ex-territórios (AP, AC, RO e RR)  
-+ Tocantis (gerido por Goiás)  
-+ DF (devido às peculiaridades)    
+ 
 
 Visão Geral
 =============================================
@@ -226,7 +228,7 @@ renderValueBox({
  valueBox( # utilizar funções divisor() e escala () para converter automaticamente valores para milhar, milhão, bilhão...  
     paste0("R$ ", divisor(valor)," ",  escala(valor)),
   color = "red",
-  caption = max(df.bcb$ref.date))
+  caption = paste0( "de ", month(max(df.bcb$ref.date)) ,"-",year(max(df.bcb$ref.date))))
   })
 
 ```
@@ -287,7 +289,7 @@ Row
 renderPlotly(
   
     
-ggplot(base_percentual()   , aes(x = reorder (uo_cod,(-nominal)), y = round((nominal)/1000000,1)))+ coord_flip() + 
+ggplot(base_percentual()   , aes(x = reorder (sigla,(-nominal)), y = round((nominal)/1000000,1)))+ coord_flip() + 
     geom_col(fill = if_else( base_percentual()$nominal >0,"red", "blue"))+
   theme_classic()+
     
@@ -304,7 +306,7 @@ ggplot(base_percentual()   , aes(x = reorder (uo_cod,(-nominal)), y = round((nom
 renderPlotly(
   
     
-ggplot(base_percentual()    , aes(x = reorder (uo_cod,(-percentual)), y = percentual))+ coord_flip() + 
+ggplot(base_percentual()    , aes(x = reorder (sigla,(-percentual)), y = percentual))+ coord_flip() + 
     geom_col(fill = if_else( base_percentual()$percentual >0,"red", "blue"))+
   theme_classic()+
     
@@ -322,7 +324,7 @@ ggplot(base_percentual()    , aes(x = reorder (uo_cod,(-percentual)), y = percen
 renderPlotly(
   
     
-ggplot(base_custeio()   , aes(x = reorder (tipo_custeio,(-nominal)), y = round((nominal)/1000000,1)))+ coord_flip() + 
+ggplot(base_custeio()   , aes(x = reorder (tipo_desc,(-nominal)), y = round((nominal)/1000000,1)))+ coord_flip() + 
     geom_col(fill = if_else( base_custeio()$nominal >0,"red", "blue"))+
   theme_classic()+
     
@@ -341,7 +343,7 @@ ggplot(base_custeio()   , aes(x = reorder (tipo_custeio,(-nominal)), y = round((
 renderPlotly(
   
     
-ggplot(base_custeio()    , aes(x = reorder (tipo_custeio,(-percentual)), y = percentual))+ coord_flip() + 
+ggplot(base_custeio()    , aes(x = reorder (tipo_desc,(-percentual)), y = percentual))+ coord_flip() + 
     geom_col(fill = if_else( base_custeio()$percentual >0,"red", "blue"))+
   theme_classic()+
     
